@@ -1,0 +1,249 @@
+{
+  "entities": {
+    "UserPublic": {
+      "title": "UserPublic",
+      "description": "Public profile metadata for a Job Poster or Job Seeker (no PII).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "bio": { "type": "string", "maxLength": 400 },
+        "ratingAvg": { "type": "number" },
+        "ratingCount": { "type": "number" },
+        "completedJobsCount": { "type": "number" },
+        "kycVerified": { "type": "boolean" },
+        "accountStatus": { "type": "string", "enum": ["active", "blocked"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "ratingAvg", "ratingCount", "completedJobsCount", "kycVerified", "accountStatus", "createdAt", "updatedAt"]
+    },
+    "UserPrivate": {
+      "title": "UserPrivate",
+      "description": "Isolated PII, payout details, and KYC verification records owned by the user.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "maxLength": 160 },
+        "mobile": { "type": "string", "maxLength": 20 },
+        "mobileVerified": { "type": "boolean" },
+        "upiId": { "type": "string", "maxLength": 100 },
+        "bankAccountLast4": { "type": "string", "maxLength": 8 },
+        "bankIfsc": { "type": "string", "maxLength": 20 },
+        "kycStatus": { "type": "string", "enum": ["none", "pending", "verified", "rejected"] },
+        "kycDocType": { "type": "string", "maxLength": 40 },
+        "kycDocLast4": { "type": "string", "maxLength": 12 },
+        "preferredMode": { "type": "string", "enum": ["both", "poster", "seeker"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "mobile", "mobileVerified", "kycStatus", "preferredMode", "createdAt", "updatedAt"]
+    },
+    "Job": {
+      "title": "Job",
+      "description": "A task posted by a Job Poster with fixed escrow budget from Rs. 1 to Rs. 1,00,000.",
+      "type": "object",
+      "properties": {
+        "jobId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "posterId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "posterName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "posterRating": { "type": "number" },
+        "posterVerified": { "type": "boolean" },
+        "workerId": { "type": "string", "maxLength": 128 },
+        "workerName": { "type": "string", "maxLength": 100 },
+        "title": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "description": { "type": "string", "minLength": 10, "maxLength": 3000 },
+        "category": { "type": "string", "enum": ["Document & Typing", "Design & Posters", "Tech & Bug Fix", "Delivery & Local", "Tutoring & Teaching", "Video & Audio", "Other"] },
+        "amount": { "type": "number" },
+        "platformFee": { "type": "number" },
+        "netPayout": { "type": "number" },
+        "deadline": { "type": "string", "minLength": 4, "maxLength": 40 },
+        "attachments": { "type": "array" },
+        "status": { "type": "string", "enum": ["open", "accepted", "submitted", "changes_requested", "completed", "cancelled", "disputed"] },
+        "paymentStatus": { "type": "string", "enum": ["held", "released", "refunded", "split", "disputed"] },
+        "submissionMessage": { "type": "string", "maxLength": 2000 },
+        "submissionLinks": { "type": "array" },
+        "changeRequestNote": { "type": "string", "maxLength": 1000 },
+        "posterRated": { "type": "boolean" },
+        "workerRated": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["jobId", "posterId", "posterName", "posterRating", "posterVerified", "title", "description", "category", "amount", "platformFee", "netPayout", "deadline", "attachments", "status", "paymentStatus", "posterRated", "workerRated", "createdAt", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "In-app chat message between Job Poster and Job Seeker for an accepted job.",
+      "type": "object",
+      "properties": {
+        "messageId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "jobId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "posterId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "workerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "senderId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "senderName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "text": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "attachmentUrl": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["messageId", "jobId", "posterId", "workerId", "senderId", "senderName", "text", "createdAt"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Escrow payment ledger and attempt record linked to a job.",
+      "type": "object",
+      "properties": {
+        "paymentId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "jobId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "posterId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "workerId": { "type": "string", "maxLength": 128 },
+        "amount": { "type": "number" },
+        "platformFee": { "type": "number" },
+        "netPayout": { "type": "number" },
+        "workerPayout": { "type": "number" },
+        "posterRefund": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["upi", "card", "netbanking"] },
+        "status": { "type": "string", "enum": ["held", "released", "refunded", "split", "disputed", "failed"] },
+        "refundStatus": { "type": "string", "enum": ["none", "pending", "processed", "completed"] },
+        "refundReason": { "type": "string", "maxLength": 400 },
+        "gatewayRef": { "type": "string", "minLength": 4, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["paymentId", "jobId", "posterId", "amount", "platformFee", "netPayout", "workerPayout", "posterRefund", "paymentMethod", "status", "refundStatus", "gatewayRef", "createdAt", "updatedAt"]
+    },
+    "Withdrawal": {
+      "title": "Withdrawal",
+      "description": "Worker payout withdrawal request to bank account or UPI ID.",
+      "type": "object",
+      "properties": {
+        "withdrawalId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "amount": { "type": "number" },
+        "method": { "type": "string", "enum": ["upi", "bank"] },
+        "destination": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "status": { "type": "string", "enum": ["pending", "completed", "rejected"] },
+        "idempotencyKey": { "type": "string", "minLength": 4, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["withdrawalId", "userId", "amount", "method", "destination", "status", "idempotencyKey", "createdAt", "updatedAt"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Rating and review written after a job is completed.",
+      "type": "object",
+      "properties": {
+        "reviewId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "jobId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "reviewerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "reviewerName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "revieweeId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "role": { "type": "string", "enum": ["poster", "worker"] },
+        "rating": { "type": "number" },
+        "comment": { "type": "string", "minLength": 2, "maxLength": 500 },
+        "removed": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["reviewId", "jobId", "reviewerId", "reviewerName", "revieweeId", "role", "rating", "comment", "removed", "createdAt"]
+    },
+    "Dispute": {
+      "title": "Dispute",
+      "description": "Dispute raised by either Job Poster or Job Seeker for admin resolution.",
+      "type": "object",
+      "properties": {
+        "disputeId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "jobId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "jobTitle": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "posterId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "workerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "raisedBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "raisedByName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "reason": { "type": "string", "minLength": 5, "maxLength": 1000 },
+        "evidence": { "type": "string", "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["open", "resolved"] },
+        "adminDecision": { "type": "string", "enum": ["none", "release_worker", "refund_poster", "split"] },
+        "decisionNote": { "type": "string", "maxLength": 1000 },
+        "workerShare": { "type": "number" },
+        "posterShare": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["disputeId", "jobId", "jobTitle", "posterId", "workerId", "raisedBy", "raisedByName", "reason", "status", "adminDecision", "workerShare", "posterShare", "createdAt", "updatedAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "In-app alert for job, payment, dispute, and withdrawal events.",
+      "type": "object",
+      "properties": {
+        "notifId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "recipientId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "type": { "type": "string", "enum": ["job_posted", "job_accepted", "work_submitted", "changes_requested", "payment_released", "dispute_update", "withdrawal", "deadline_reminder"] },
+        "title": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "message": { "type": "string", "minLength": 2, "maxLength": 400 },
+        "jobId": { "type": "string", "maxLength": 128 },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["notifId", "recipientId", "type", "title", "message", "read", "createdAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable accountability trail for key user and admin actions.",
+      "type": "object",
+      "properties": {
+        "logId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "actorId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "actorName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "action": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "entityType": { "type": "string", "minLength": 2, "maxLength": 40 },
+        "entityId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "summary": { "type": "string", "minLength": 2, "maxLength": 400 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["logId", "actorId", "actorName", "action", "entityType", "entityId", "summary", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserPublic" },
+      "description": "Public user profiles (no PII)."
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/UserPrivate" },
+      "description": "Private PII, KYC details, and payout settings."
+    },
+    "/jobs/{jobId}": {
+      "schema": { "$ref": "#/entities/Job" },
+      "description": "Marketplace jobs with held escrow amounts from Rs. 1 to Rs. 1,00,000."
+    },
+    "/jobs/{jobId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Per-job chat messages strictly between poster, worker, and admin."
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/Payment" },
+      "description": "Held escrow payment and release/refund ledger."
+    },
+    "/withdrawals/{withdrawalId}": {
+      "schema": { "$ref": "#/entities/Withdrawal" },
+      "description": "Worker bank and UPI withdrawal records."
+    },
+    "/reviews/{reviewId}": {
+      "schema": { "$ref": "#/entities/Review" },
+      "description": "Post-completion ratings and reviews."
+    },
+    "/disputes/{disputeId}": {
+      "schema": { "$ref": "#/entities/Dispute" },
+      "description": "Job disputes escalated for admin resolution."
+    },
+    "/notifications/{notifId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "User alerts for job, payment, and dispute events."
+    },
+    "/audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Auditability log of platform actions."
+    }
+  }
+}

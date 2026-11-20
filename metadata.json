@@ -1,0 +1,8 @@
+{
+  "name": "Instant Job",
+  "description": "Escrow-protected task marketplace for posting, accepting, completing, and paying for jobs from Rs. 1 to Rs. 1,00,000.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

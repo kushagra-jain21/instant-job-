@@ -1,0 +1,643 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Connection test endpoint
+    match /test/connection {
+      allow get: if true;
+    }
+
+    // --- Primitive Helpers ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isTokenAdmin() {
+      return isVerifiedUser() && request.auth.token.email == '21.jain.kushagra@gmail.com';
+    }
+
+    function isAdmin() {
+      return isTokenAdmin() || (
+        isVerifiedUser() && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidOptionalString(val, maxLen) {
+      return val == null || (val is string && val.size() <= maxLen);
+    }
+
+    function isValidStringList(listVal, maxItems, maxItemLen) {
+      return listVal is list
+        && listVal.size() <= maxItems
+        && (listVal.size() == 0 || (listVal[0] is string && listVal[0].size() <= maxItemLen));
+    }
+
+    // --- Entity Validation Blueprints ---
+    function isValidUserPublic(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'ratingAvg', 'ratingCount', 'completedJobsCount', 'kycVerified', 'accountStatus', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'bio', 'ratingAvg', 'ratingCount', 'completedJobsCount', 'kycVerified', 'accountStatus', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100
+        && (!data.keys().hasAny(['bio']) || isValidOptionalString(data.bio, 400))
+        && data.ratingAvg is number && data.ratingAvg >= 0 && data.ratingAvg <= 5
+        && data.ratingCount is number && data.ratingCount >= 0
+        && data.completedJobsCount is number && data.completedJobsCount >= 0
+        && data.kycVerified is bool
+        && data.accountStatus in ['active', 'blocked']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivate(data) {
+      return data.keys().hasAll(['uid', 'email', 'mobile', 'mobileVerified', 'kycStatus', 'preferredMode', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'mobile', 'mobileVerified', 'upiId', 'bankAccountLast4', 'bankIfsc', 'kycStatus', 'kycDocType', 'kycDocLast4', 'preferredMode', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.email is string && data.email.size() <= 160
+        && data.mobile is string && data.mobile.size() <= 20
+        && data.mobileVerified is bool
+        && (!data.keys().hasAny(['upiId']) || isValidOptionalString(data.upiId, 100))
+        && (!data.keys().hasAny(['bankAccountLast4']) || isValidOptionalString(data.bankAccountLast4, 8))
+        && (!data.keys().hasAny(['bankIfsc']) || isValidOptionalString(data.bankIfsc, 20))
+        && data.kycStatus in ['none', 'pending', 'verified', 'rejected']
+        && (!data.keys().hasAny(['kycDocType']) || isValidOptionalString(data.kycDocType, 40))
+        && (!data.keys().hasAny(['kycDocLast4']) || isValidOptionalString(data.kycDocLast4, 12))
+        && data.preferredMode in ['both', 'poster', 'seeker']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidJob(data) {
+      return data.keys().hasAll([
+          'jobId', 'posterId', 'posterName', 'posterRating', 'posterVerified',
+          'title', 'description', 'category', 'amount', 'platformFee', 'netPayout',
+          'deadline', 'attachments', 'status', 'paymentStatus', 'posterRated', 'workerRated',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'jobId', 'posterId', 'posterName', 'posterRating', 'posterVerified',
+          'workerId', 'workerName', 'title', 'description', 'category',
+          'amount', 'platformFee', 'netPayout', 'deadline', 'attachments',
+          'status', 'paymentStatus', 'submissionMessage', 'submissionLinks',
+          'submittedAt', 'changeRequestNote', 'acceptedAt', 'completedAt',
+          'posterRated', 'workerRated', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.jobId)
+        && isValidId(data.posterId)
+        && data.posterName is string && data.posterName.size() >= 1 && data.posterName.size() <= 100
+        && data.posterRating is number && data.posterRating >= 0 && data.posterRating <= 5
+        && data.posterVerified is bool
+        && (!data.keys().hasAny(['workerId']) || data.workerId == null || isValidId(data.workerId))
+        && (!data.keys().hasAny(['workerName']) || isValidOptionalString(data.workerName, 100))
+        && data.title is string && data.title.size() >= 3 && data.title.size() <= 120
+        && data.description is string && data.description.size() >= 10 && data.description.size() <= 3000
+        && data.category in ['Document & Typing', 'Design & Posters', 'Tech & Bug Fix', 'Delivery & Local', 'Tutoring & Teaching', 'Video & Audio', 'Other']
+        && data.amount is number && data.amount >= 1 && data.amount <= 100000
+        && data.platformFee is number && data.platformFee >= 0 && data.platformFee <= 10000
+        && data.netPayout is number && data.netPayout >= 1 && data.netPayout <= 100000
+        && data.deadline is string && data.deadline.size() >= 4 && data.deadline.size() <= 40
+        && isValidStringList(data.attachments, 5, 500)
+        && data.status in ['open', 'accepted', 'submitted', 'changes_requested', 'completed', 'cancelled', 'disputed']
+        && data.paymentStatus in ['held', 'released', 'refunded', 'split', 'disputed']
+        && (!data.keys().hasAny(['submissionMessage']) || isValidOptionalString(data.submissionMessage, 2000))
+        && (!data.keys().hasAny(['submissionLinks']) || data.submissionLinks == null || isValidStringList(data.submissionLinks, 5, 500))
+        && (!data.keys().hasAny(['submittedAt']) || data.submittedAt == null || data.submittedAt is timestamp)
+        && (!data.keys().hasAny(['changeRequestNote']) || isValidOptionalString(data.changeRequestNote, 1000))
+        && (!data.keys().hasAny(['acceptedAt']) || data.acceptedAt == null || data.acceptedAt is timestamp)
+        && (!data.keys().hasAny(['completedAt']) || data.completedAt == null || data.completedAt is timestamp)
+        && data.posterRated is bool
+        && data.workerRated is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidChatMessage(data) {
+      return data.keys().hasAll(['messageId', 'jobId', 'posterId', 'workerId', 'senderId', 'senderName', 'text', 'createdAt'])
+        && data.keys().hasOnly(['messageId', 'jobId', 'posterId', 'workerId', 'senderId', 'senderName', 'text', 'attachmentUrl', 'createdAt'])
+        && isValidId(data.messageId)
+        && isValidId(data.jobId)
+        && isValidId(data.posterId)
+        && isValidId(data.workerId)
+        && isValidId(data.senderId)
+        && data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 100
+        && data.text is string && data.text.size() >= 1 && data.text.size() <= 2000
+        && (!data.keys().hasAny(['attachmentUrl']) || isValidOptionalString(data.attachmentUrl, 500))
+        && data.createdAt is timestamp;
+    }
+
+    function isValidPayment(data) {
+      return data.keys().hasAll(['paymentId', 'jobId', 'posterId', 'amount', 'platformFee', 'netPayout', 'workerPayout', 'posterRefund', 'paymentMethod', 'status', 'refundStatus', 'gatewayRef', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['paymentId', 'jobId', 'posterId', 'workerId', 'amount', 'platformFee', 'netPayout', 'workerPayout', 'posterRefund', 'paymentMethod', 'status', 'refundStatus', 'refundReason', 'gatewayRef', 'createdAt', 'updatedAt'])
+        && isValidId(data.paymentId)
+        && isValidId(data.jobId)
+        && isValidId(data.posterId)
+        && (!data.keys().hasAny(['workerId']) || data.workerId == null || isValidId(data.workerId))
+        && data.amount is number && data.amount >= 1 && data.amount <= 100000
+        && data.platformFee is number && data.platformFee >= 0 && data.platformFee <= 10000
+        && data.netPayout is number && data.netPayout >= 1 && data.netPayout <= 100000
+        && data.workerPayout is number && data.workerPayout >= 0 && data.workerPayout <= 100000
+        && data.posterRefund is number && data.posterRefund >= 0 && data.posterRefund <= 100000
+        && data.paymentMethod in ['upi', 'card', 'netbanking']
+        && data.status in ['held', 'released', 'refunded', 'split', 'disputed', 'failed']
+        && data.refundStatus in ['none', 'pending', 'processed', 'completed']
+        && (!data.keys().hasAny(['refundReason']) || isValidOptionalString(data.refundReason, 400))
+        && data.gatewayRef is string && data.gatewayRef.size() >= 4 && data.gatewayRef.size() <= 128
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidWithdrawal(data) {
+      return data.keys().hasAll(['withdrawalId', 'userId', 'amount', 'method', 'destination', 'status', 'idempotencyKey', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['withdrawalId', 'userId', 'amount', 'method', 'destination', 'status', 'idempotencyKey', 'createdAt', 'updatedAt'])
+        && isValidId(data.withdrawalId)
+        && isValidId(data.userId)
+        && data.amount is number && data.amount >= 1 && data.amount <= 100000
+        && data.method in ['upi', 'bank']
+        && data.destination is string && data.destination.size() >= 3 && data.destination.size() <= 120
+        && data.status in ['pending', 'completed', 'rejected']
+        && data.idempotencyKey is string && data.idempotencyKey.size() >= 4 && data.idempotencyKey.size() <= 128
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidReview(data) {
+      return data.keys().hasAll(['reviewId', 'jobId', 'reviewerId', 'reviewerName', 'revieweeId', 'role', 'rating', 'comment', 'removed', 'createdAt'])
+        && data.keys().hasOnly(['reviewId', 'jobId', 'reviewerId', 'reviewerName', 'revieweeId', 'role', 'rating', 'comment', 'removed', 'createdAt'])
+        && isValidId(data.reviewId)
+        && isValidId(data.jobId)
+        && isValidId(data.reviewerId)
+        && data.reviewerName is string && data.reviewerName.size() >= 1 && data.reviewerName.size() <= 100
+        && isValidId(data.revieweeId)
+        && data.role in ['poster', 'worker']
+        && data.rating is number && data.rating >= 1 && data.rating <= 5
+        && data.comment is string && data.comment.size() >= 2 && data.comment.size() <= 500
+        && data.removed is bool
+        && data.createdAt is timestamp;
+    }
+
+    function isValidDispute(data) {
+      return data.keys().hasAll(['disputeId', 'jobId', 'jobTitle', 'posterId', 'workerId', 'raisedBy', 'raisedByName', 'reason', 'status', 'adminDecision', 'workerShare', 'posterShare', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['disputeId', 'jobId', 'jobTitle', 'posterId', 'workerId', 'raisedBy', 'raisedByName', 'reason', 'evidence', 'status', 'adminDecision', 'decisionNote', 'workerShare', 'posterShare', 'createdAt', 'updatedAt'])
+        && isValidId(data.disputeId)
+        && isValidId(data.jobId)
+        && data.jobTitle is string && data.jobTitle.size() >= 1 && data.jobTitle.size() <= 120
+        && isValidId(data.posterId)
+        && isValidId(data.workerId)
+        && isValidId(data.raisedBy)
+        && data.raisedByName is string && data.raisedByName.size() >= 1 && data.raisedByName.size() <= 100
+        && data.reason is string && data.reason.size() >= 5 && data.reason.size() <= 1000
+        && (!data.keys().hasAny(['evidence']) || isValidOptionalString(data.evidence, 1000))
+        && data.status in ['open', 'resolved']
+        && data.adminDecision in ['none', 'release_worker', 'refund_poster', 'split']
+        && (!data.keys().hasAny(['decisionNote']) || isValidOptionalString(data.decisionNote, 1000))
+        && data.workerShare is number && data.workerShare >= 0 && data.workerShare <= 100000
+        && data.posterShare is number && data.posterShare >= 0 && data.posterShare <= 100000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['notifId', 'recipientId', 'type', 'title', 'message', 'read', 'createdAt'])
+        && data.keys().hasOnly(['notifId', 'recipientId', 'type', 'title', 'message', 'jobId', 'read', 'createdAt'])
+        && isValidId(data.notifId)
+        && isValidId(data.recipientId)
+        && data.type in ['job_posted', 'job_accepted', 'work_submitted', 'changes_requested', 'payment_released', 'dispute_update', 'withdrawal', 'deadline_reminder']
+        && data.title is string && data.title.size() >= 2 && data.title.size() <= 120
+        && data.message is string && data.message.size() >= 2 && data.message.size() <= 400
+        && (!data.keys().hasAny(['jobId']) || isValidOptionalString(data.jobId, 128))
+        && data.read is bool
+        && data.createdAt is timestamp;
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['logId', 'actorId', 'actorName', 'action', 'entityType', 'entityId', 'summary', 'createdAt'])
+        && data.keys().hasOnly(['logId', 'actorId', 'actorName', 'action', 'entityType', 'entityId', 'summary', 'createdAt'])
+        && isValidId(data.logId)
+        && isValidId(data.actorId)
+        && data.actorName is string && data.actorName.size() >= 1 && data.actorName.size() <= 100
+        && data.action is string && data.action.size() >= 2 && data.action.size() <= 100
+        && data.entityType is string && data.entityType.size() >= 2 && data.entityType.size() <= 40
+        && isValidId(data.entityId)
+        && data.summary is string && data.summary.size() >= 2 && data.summary.size() <= 400
+        && data.createdAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && (isOwner(adminId) || isAdmin());
+      allow list: if isTokenAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isSignedIn();
+      allow list: if isTokenAdmin();
+      allow create: if isValidId(userId)
+        && isVerifiedUser()
+        && isOwner(userId)
+        && isValidUserPublic(incoming())
+        && incoming().uid == userId
+        && incoming().kycVerified == false
+        && incoming().accountStatus == 'active'
+        && incoming().ratingAvg == 0
+        && incoming().ratingCount == 0
+        && incoming().completedJobsCount == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && isVerifiedUser()
+        && isValidUserPublic(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'bio', 'updatedAt'])) ||
+          (incoming().diff(existing()).affectedKeys().hasOnly(['ratingAvg', 'ratingCount', 'updatedAt'])) ||
+          (incoming().diff(existing()).affectedKeys().hasOnly(['completedJobsCount', 'updatedAt']))
+        );
+      allow delete: if isValidId(userId) && isAdmin();
+
+      match /private/{docId} {
+        allow get: if isValidId(userId) && isValidId(docId) && (isOwner(userId) || isAdmin());
+        allow list: if isOwner(userId) || isTokenAdmin();
+        allow create: if isValidId(userId) && isValidId(docId)
+          && isVerifiedUser()
+          && isOwner(userId)
+          && isValidUserPrivate(incoming())
+          && incoming().uid == userId
+          && incoming().kycStatus == 'none'
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(userId) && isValidId(docId)
+          && isVerifiedUser()
+          && isValidUserPrivate(incoming())
+          && incoming().uid == existing().uid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            isAdmin() ||
+            (
+              isOwner(userId)
+              && incoming().diff(existing()).affectedKeys().hasOnly([
+                'mobile', 'mobileVerified', 'upiId', 'bankAccountLast4', 'bankIfsc',
+                'kycStatus', 'kycDocType', 'kycDocLast4', 'preferredMode', 'updatedAt'
+              ])
+              && incoming().kycStatus in ['none', 'pending']
+            )
+          );
+        allow delete: if isValidId(userId) && isValidId(docId) && isAdmin();
+      }
+    }
+
+    match /jobs/{jobId} {
+      allow get: if isValidId(jobId) && (
+        existing().status == 'open'
+        || (isSignedIn() && (existing().posterId == request.auth.uid || existing().workerId == request.auth.uid))
+        || isAdmin()
+      );
+      allow list: if existing().status == 'open'
+        || (isSignedIn() && (existing().posterId == request.auth.uid || existing().workerId == request.auth.uid))
+        || isTokenAdmin();
+
+      allow create: if isValidId(jobId)
+        && isVerifiedUser()
+        && isValidJob(incoming())
+        && incoming().jobId == jobId
+        && incoming().posterId == request.auth.uid
+        && incoming().workerId == null
+        && incoming().status == 'open'
+        && incoming().paymentStatus == 'held'
+        && incoming().posterRated == false
+        && incoming().workerRated == false
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(jobId)
+        && isVerifiedUser()
+        && isValidJob(incoming())
+        && incoming().jobId == existing().jobId
+        && incoming().posterId == existing().posterId
+        && incoming().amount == existing().amount
+        && incoming().platformFee == existing().platformFee
+        && incoming().netPayout == existing().netPayout
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            !(existing().status in ['completed', 'cancelled']) && (
+              (
+                existing().posterId == request.auth.uid
+                && existing().status == 'open'
+                && incoming().status == 'open'
+                && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'category', 'deadline', 'attachments', 'updatedAt'])
+              ) ||
+              (
+                existing().posterId == request.auth.uid
+                && existing().status == 'open'
+                && incoming().status == 'cancelled'
+                && incoming().paymentStatus == 'refunded'
+                && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'paymentStatus', 'updatedAt'])
+              ) ||
+              (
+                existing().status == 'open'
+                && existing().workerId == null
+                && existing().posterId != request.auth.uid
+                && incoming().workerId == request.auth.uid
+                && incoming().status == 'accepted'
+                && incoming().acceptedAt == request.time
+                && incoming().diff(existing()).affectedKeys().hasOnly(['workerId', 'workerName', 'status', 'acceptedAt', 'updatedAt'])
+              ) ||
+              (
+                existing().workerId == request.auth.uid
+                && existing().status in ['accepted', 'changes_requested']
+                && incoming().status == 'submitted'
+                && incoming().submittedAt == request.time
+                && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'submissionMessage', 'submissionLinks', 'submittedAt', 'updatedAt'])
+              ) ||
+              (
+                existing().posterId == request.auth.uid
+                && existing().status == 'submitted'
+                && incoming().status == 'changes_requested'
+                && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'changeRequestNote', 'updatedAt'])
+              ) ||
+              (
+                existing().posterId == request.auth.uid
+                && existing().status == 'submitted'
+                && incoming().status == 'completed'
+                && incoming().paymentStatus == 'released'
+                && incoming().completedAt == request.time
+                && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'paymentStatus', 'completedAt', 'updatedAt'])
+              ) ||
+              (
+                (existing().posterId == request.auth.uid || existing().workerId == request.auth.uid)
+                && existing().status in ['accepted', 'submitted', 'changes_requested']
+                && incoming().status == 'disputed'
+                && incoming().paymentStatus == 'disputed'
+                && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'paymentStatus', 'updatedAt'])
+              )
+            )
+          ) ||
+          (
+            existing().status == 'completed'
+            && (
+              (existing().posterId == request.auth.uid && incoming().posterRated == true && incoming().diff(existing()).affectedKeys().hasOnly(['posterRated', 'updatedAt'])) ||
+              (existing().workerId == request.auth.uid && incoming().workerRated == true && incoming().diff(existing()).affectedKeys().hasOnly(['workerRated', 'updatedAt']))
+            )
+          )
+        );
+
+      allow delete: if isValidId(jobId) && isAdmin();
+
+      match /messages/{messageId} {
+        allow get: if isValidId(jobId) && isValidId(messageId) && isSignedIn() && (
+          get(/databases/$(database)/documents/jobs/$(jobId)).data.posterId == request.auth.uid ||
+          get(/databases/$(database)/documents/jobs/$(jobId)).data.workerId == request.auth.uid ||
+          isAdmin()
+        );
+        allow list: if isSignedIn() && (
+          existing().posterId == request.auth.uid ||
+          existing().workerId == request.auth.uid ||
+          isTokenAdmin()
+        );
+        allow create: if isValidId(jobId) && isValidId(messageId)
+          && isVerifiedUser()
+          && isValidChatMessage(incoming())
+          && incoming().messageId == messageId
+          && incoming().jobId == jobId
+          && incoming().senderId == request.auth.uid
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/jobs/$(jobId))
+          && get(/databases/$(database)/documents/jobs/$(jobId)).data.posterId == incoming().posterId
+          && get(/databases/$(database)/documents/jobs/$(jobId)).data.workerId == incoming().workerId
+          && (
+            get(/databases/$(database)/documents/jobs/$(jobId)).data.posterId == request.auth.uid ||
+            get(/databases/$(database)/documents/jobs/$(jobId)).data.workerId == request.auth.uid
+          );
+        allow update, delete: if isValidId(jobId) && isValidId(messageId) && isAdmin();
+      }
+    }
+
+    match /payments/{paymentId} {
+      allow get: if isValidId(paymentId) && isSignedIn() && (
+        existing().posterId == request.auth.uid ||
+        existing().workerId == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        existing().posterId == request.auth.uid ||
+        existing().workerId == request.auth.uid ||
+        isTokenAdmin()
+      );
+      allow create: if isValidId(paymentId)
+        && isVerifiedUser()
+        && isValidPayment(incoming())
+        && incoming().paymentId == paymentId
+        && incoming().posterId == request.auth.uid
+        && incoming().workerId == null
+        && incoming().status in ['held', 'failed']
+        && incoming().workerPayout == 0
+        && incoming().posterRefund == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(paymentId)
+        && isVerifiedUser()
+        && isValidPayment(incoming())
+        && incoming().paymentId == existing().paymentId
+        && incoming().jobId == existing().jobId
+        && incoming().posterId == existing().posterId
+        && incoming().amount == existing().amount
+        && incoming().platformFee == existing().platformFee
+        && incoming().netPayout == existing().netPayout
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            !(existing().status in ['released', 'refunded', 'split', 'failed']) && (
+              (
+                existing().status == 'held'
+                && existing().workerId == null
+                && existing().posterId != request.auth.uid
+                && incoming().workerId == request.auth.uid
+                && incoming().diff(existing()).affectedKeys().hasOnly(['workerId', 'updatedAt'])
+              ) ||
+              (
+                existing().posterId == request.auth.uid
+                && existing().status == 'held'
+                && incoming().status == 'released'
+                && incoming().workerPayout == existing().netPayout
+                && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'workerPayout', 'updatedAt'])
+              ) ||
+              (
+                existing().posterId == request.auth.uid
+                && existing().status == 'held'
+                && existing().workerId == null
+                && incoming().status == 'refunded'
+                && incoming().refundStatus == 'completed'
+                && incoming().posterRefund == existing().amount
+                && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'refundStatus', 'refundReason', 'posterRefund', 'updatedAt'])
+              ) ||
+              (
+                (existing().posterId == request.auth.uid || existing().workerId == request.auth.uid)
+                && existing().status == 'held'
+                && incoming().status == 'disputed'
+                && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+              )
+            )
+          )
+        );
+      allow delete: if isValidId(paymentId) && isAdmin();
+    }
+
+    match /withdrawals/{withdrawalId} {
+      allow get: if isValidId(withdrawalId) && isSignedIn() && (
+        existing().userId == request.auth.uid || isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        existing().userId == request.auth.uid || isTokenAdmin()
+      );
+      allow create: if isValidId(withdrawalId)
+        && isVerifiedUser()
+        && isValidWithdrawal(incoming())
+        && incoming().withdrawalId == withdrawalId
+        && incoming().userId == request.auth.uid
+        && incoming().status in ['pending', 'completed']
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update, delete: if isValidId(withdrawalId) && isAdmin();
+    }
+
+    match /reviews/{reviewId} {
+      allow get: if isValidId(reviewId) && isSignedIn() && (
+        existing().removed == false ||
+        existing().reviewerId == request.auth.uid ||
+        existing().revieweeId == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        existing().removed == false ||
+        existing().reviewerId == request.auth.uid ||
+        existing().revieweeId == request.auth.uid ||
+        isTokenAdmin()
+      );
+      allow create: if isValidId(reviewId)
+        && isVerifiedUser()
+        && isValidReview(incoming())
+        && incoming().reviewId == reviewId
+        && incoming().reviewerId == request.auth.uid
+        && incoming().removed == false
+        && incoming().createdAt == request.time
+        && exists(/databases/$(database)/documents/jobs/$(incoming().jobId))
+        && get(/databases/$(database)/documents/jobs/$(incoming().jobId)).data.status == 'completed'
+        && (
+          get(/databases/$(database)/documents/jobs/$(incoming().jobId)).data.posterId == request.auth.uid ||
+          get(/databases/$(database)/documents/jobs/$(incoming().jobId)).data.workerId == request.auth.uid
+        );
+      allow update: if isValidId(reviewId)
+        && isAdmin()
+        && isValidReview(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly(['removed']);
+      allow delete: if isValidId(reviewId) && isAdmin();
+    }
+
+    match /disputes/{disputeId} {
+      allow get: if isValidId(disputeId) && isSignedIn() && (
+        existing().posterId == request.auth.uid ||
+        existing().workerId == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        existing().posterId == request.auth.uid ||
+        existing().workerId == request.auth.uid ||
+        isTokenAdmin()
+      );
+      allow create: if isValidId(disputeId)
+        && isVerifiedUser()
+        && isValidDispute(incoming())
+        && incoming().disputeId == disputeId
+        && incoming().raisedBy == request.auth.uid
+        && incoming().status == 'open'
+        && incoming().adminDecision == 'none'
+        && incoming().workerShare == 0
+        && incoming().posterShare == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/jobs/$(incoming().jobId))
+        && (
+          get(/databases/$(database)/documents/jobs/$(incoming().jobId)).data.posterId == request.auth.uid ||
+          get(/databases/$(database)/documents/jobs/$(incoming().jobId)).data.workerId == request.auth.uid
+        );
+      allow update: if isValidId(disputeId)
+        && isAdmin()
+        && isValidDispute(incoming())
+        && incoming().disputeId == existing().disputeId
+        && incoming().jobId == existing().jobId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(disputeId) && isAdmin();
+    }
+
+    match /notifications/{notifId} {
+      allow get: if isValidId(notifId) && isSignedIn() && (
+        existing().recipientId == request.auth.uid || isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        existing().recipientId == request.auth.uid || isTokenAdmin()
+      );
+      allow create: if isValidId(notifId)
+        && isVerifiedUser()
+        && isValidNotification(incoming())
+        && incoming().notifId == notifId
+        && incoming().read == false
+        && incoming().createdAt == request.time;
+      allow update: if isValidId(notifId)
+        && isVerifiedUser()
+        && isValidNotification(incoming())
+        && existing().recipientId == request.auth.uid
+        && incoming().recipientId == existing().recipientId
+        && incoming().createdAt == existing().createdAt
+        && incoming().diff(existing()).affectedKeys().hasOnly(['read']);
+      allow delete: if isValidId(notifId) && (
+        (isSignedIn() && existing().recipientId == request.auth.uid) || isAdmin()
+      );
+    }
+
+    match /audit_logs/{logId} {
+      allow get: if isValidId(logId) && isAdmin();
+      allow list: if isTokenAdmin();
+      allow create: if isValidId(logId)
+        && isVerifiedUser()
+        && isValidAuditLog(incoming())
+        && incoming().logId == logId
+        && incoming().actorId == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+  }
+}
